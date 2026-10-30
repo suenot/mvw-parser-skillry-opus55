@@ -4,6 +4,7 @@ Downloads original + remake mp4 per slug. Prompts/metadata come from
 mvw-parser-awesome-opus55 for the same slug.
 """
 import re
+from concurrent.futures import ThreadPoolExecutor
 
 from mvw_core import Item, cli_args, fetch_text
 
@@ -22,18 +23,20 @@ def main():
     slugs = sorted(by_slug)
     if args.limit:
         slugs = slugs[: args.limit]
-    new = 0
-    for slug in slugs:
+    def work(slug):
         files = by_slug[slug]
         it = Item(SOURCE, slug)
-        new += it.is_new
+        was_new = it.is_new
         if not args.no_media:
             for (kind, ext), url in files.items():
                 name = {"original-card": "original.mp4", "remake-card": "remake.mp4",
                         "original": "poster.webp", "remake": "remake-poster.webp"}[kind]
-                if ext == "mp4" or kind in ("original", "remake"):
-                    it.download(name, url)
+                it.download(name, url)
         it.save_meta(title=slug, source_url=f"{PAGE}/{slug}")
+        return was_new
+
+    with ThreadPoolExecutor(max_workers=8) as ex:
+        new = sum(ex.map(work, slugs))
     print(f"{SOURCE}: {len(slugs)} items, {new} new")
 
 
